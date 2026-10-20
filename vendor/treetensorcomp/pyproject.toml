@@ -1,0 +1,43 @@
+[project]
+name = "treetensorcomp"
+version = "0.1.0"
+description = "Research code for tree-tensor-network-based quantum state preparation"
+authors = [{ name = "Matt Sims-Goh", email = "matt.sims-goh@quantummotion.tech"}]
+license = "AGPL-3.0-only"
+readme = "README.md"
+
+# TODO(Vasco): go through and actually calculate minimum bounds
+dependencies = [
+    "matplotlib>=3.10.8",
+    "networkx>=3.6.1",
+    "numpy>=2.4.2",
+    "pydot>=4.0.1",
+    "quimb>=1.12.1",
+    "scikit-learn>=1.8.0",
+]
+
+# need explicit upper bound due to poetry
+requires-python=">=3.11, <4.0"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# required instead of [dependency-groups], since pip hasn't yet implemented PEP 735
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0.2",
+    "ruff>=0.15.2",
+]
+
+[tool.ruff]
+lint.select = ["ALL"]
+lint.ignore = [
+    "T20",    # flake8-print
+    "AIR",    # Airflow (not applicable)
+    "FAST",   # FastAPI (not applicable)
+    "D203",   # conflicts with D211
+    "D212",   # conflicts with D213
+    "COM812", # conflicts with formatter
+    "TD003"   # not applicable
+]

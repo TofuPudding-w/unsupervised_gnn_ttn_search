@@ -1,0 +1,27 @@
+name: ttcenv
+channels:
+  - conda-forge
+  - anaconda
+  - defaults
+dependencies:
+  - python=3.12.7
+  - numpy
+  - scipy=1.13.1
+  - matplotlib
+  - pip
+  - networkx
+  - ipykernel
+  - conda-build
+  - pydot
+  - quimb
+  - scikit-learn
+  - tensorflow
+  - tensorflow-probability
+  - tf-keras
+  - pip:
+    - pytest
+
+# then: conda-develop [PATH_TO_TREETENSORCOMP]
+# e.g.: conda-develop /Users/username/Documents/treetensorcomp
+# There is a bug in scipy 1.15.2 that causes issues with (1xn) interpolative decomposition...
+# I think it is because they ported interpolative from Fortran to Python in 1.15 and missed an edge case.

@@ -1,0 +1,12 @@
+{
+  "n": 8,
+  "families": ["hierarchical", "overlapping"],
+  "target_seeds": [0, 1, 2],
+  "pool_seed": 11,
+  "pool_size": 256,
+  "diagnostic_count": 32,
+  "initial_count": 8,
+  "budget": 64,
+  "search_seeds": [0, 1, 2],
+  "pipeline": {"fidelity": 0.999}
+}
