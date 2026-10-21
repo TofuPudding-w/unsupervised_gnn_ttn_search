@@ -27,6 +27,12 @@ def entropy(rho):
 
 
 def affinity_matrix(state):
+    """
+    Compute the pairwise affinity matrix for a quantum state based on mutual information.
+    The affinity between two qubits is defined as the maximum of zero and the sum of their
+    I(i:j) = S(i) + S(j) - S(ij), 
+    where S is the von Neumann entropy of the reduced density matrix.
+    """
     state = state / np.linalg.norm(state)
     n = int(np.log2(len(state)))
     singles = [entropy(reduced_density(state, [i])) for i in range(n)]
@@ -38,6 +44,15 @@ def affinity_matrix(state):
 
 
 def scent_tree(state, seed=0):
+    """
+    Generate a tree structure using the SCENT algorithm based on the provided quantum state.
+    The tree is constructed by recursively partitioning the variables based on their mutual information,
+    and the resulting tree structure is returned along with metadata about the process.
+    """
+
+    # 1. Environment preparation: 
+    # ensure the pinned SCENT vendor source is available and import necessary modules.
+    
     start = time.perf_counter()
     path = Path(__file__).resolve().parents[2] / 'vendor' / 'treetensorcomp'
     if not path.exists():
@@ -46,20 +61,31 @@ def scent_tree(state, seed=0):
     import networkx as nx
     from treetensorcomp.quantics.index_settings import IndexID
     from treetensorcomp.structural_optimization.clustering import _subdivide_cluster
-    n = int(np.log2(len(state)))
+    
+    # 2. Calculate the affinity matrix
+
+    n = int(np.log2(len(state)))    # The length of the state is 2^n, so log2(len(state)) is the number of qubits.
     affinity = affinity_matrix(state)
+    # Give a exclusive id to each qubit for SCENT's internal processing.
     ids = [IndexID('q', i + 1) for i in range(n)]
+    # Establish the mapping from SCENT's internal ids to the original qubit indices for later reconstruction.
     mapping = {str(index): i for i, index in enumerate(ids)}
     graph = nx.Graph()
+
+    # 3. Implement the binary hierarchical clustering using SCENT's recursive partitioning.
+
     # Upstream uses sklearn random_state=None. Isolate and restore its global RNG.
-    rng_state = np.random.get_state()
+    rng_state = np.random.get_state()   # Store the current state of the global random number generator to restore it later.
     try:
         np.random.seed(seed)
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter('always')
             _subdivide_cluster(graph, ids, affinity, 2)
     finally:
-        np.random.set_state(rng_state)
+        np.random.set_state(rng_state)  # Restore the global random number generator state to its original state to avoid affecting other parts of the program.
+    
+    # 4. Convert the generated graph into a canonical tree structure
+    
     # Preserve the recursive root BEFORE upstream polish_graph chooses a gauge center.
     root = next(iter(graph.nodes))
     def convert(node, parent=None):

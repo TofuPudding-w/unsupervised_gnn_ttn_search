@@ -18,7 +18,7 @@ def prepare_features(pool, kind, seed=12345, training_count=512):
     rng = np.random.default_rng(seed)
     training = np.array([features(random_tree(n, rng)) for _ in range(training_count)])
     scaler = StandardScaler().fit(training)
-    x = scaler.transform(x)
+    x = np.asarray(scaler.transform(x))
     if kind == 'pca':
         pca = PCA(n_components=min(8, x.shape[1])).fit(scaler.transform(training))
         x = pca.transform(x)
@@ -40,7 +40,12 @@ def gp_predict(x, indices, y, unseen):
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
         gp.fit(x[indices], y)
-    mean, std = gp.predict(x[unseen], return_std=True)
+    prediction = gp.predict(x[unseen], return_std=True, return_cov=False)
+    # Library stubs can expose all predict() return variants. Validate the
+    # mean/std pair explicitly so both the runtime and type checker agree.
+    if not isinstance(prediction, tuple) or len(prediction) != 2:
+        raise ValueError('GP prediction with return_std=True must return (mean, std)')
+    mean, std = prediction
     return mean, np.maximum(std, 1e-9), [str(w.message) for w in caught]
 
 
@@ -116,3 +121,4 @@ def run_search(pool, evaluator, method, budget, init, threshold, seed=0, on_step
         if on_step:
             on_step(trace)
     return trace
+ 

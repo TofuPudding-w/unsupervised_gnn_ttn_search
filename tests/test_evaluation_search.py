@@ -52,3 +52,65 @@ def test_upstream_scent_reproducible_and_rng_isolation():
     affinity = affinity_matrix(target.state)
     np.testing.assert_allclose(affinity, affinity.T)
     assert np.min(affinity) >= 0
+
+
+def test_qiskit_compiler_failure_retries_and_records_cost(monkeypatch, tmp_path):
+    import importlib
+    from qiskit.transpiler.exceptions import TranspilerError
+    module = importlib.import_module('ttn_search.evaluate')
+    original = module.compile_reference
+    calls = []
+
+    def fail_once(*args, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            raise TranspilerError('HighLevelSynthesis is unable to synthesize "isometry"')
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(module, 'compile_reference', fail_once)
+    record = evaluate(gaussian_target(4), canonical(((0, 1), (2, 3))), Pipeline(), tmp_path)
+    assert record['status'] == 'success'
+    assert len(calls) == 2
+    failure = record['attempts'][0]
+    assert failure['status'] == 'compiler_error'
+    assert failure['error_type'] == 'TranspilerError'
+    assert failure['failed_phase'] == 'compile'
+    assert failure['time_compile_s'] > 0
+    assert 'HighLevelSynthesis' in failure['traceback']
+    assert 'fidelity_final' not in failure
+
+
+def test_exhausted_compiler_failures_do_not_abort_search(monkeypatch, tmp_path):
+    import importlib
+    from qiskit.transpiler.exceptions import TranspilerError
+    module = importlib.import_module('ttn_search.evaluate')
+
+    def always_fail(*args, **kwargs):
+        raise TranspilerError('synthesis failed')
+
+    monkeypatch.setattr(module, 'compile_reference', always_fail)
+    target = gaussian_target(4)
+    pool = candidate_pool(4, 3, 0, canonical(((0, 1), (2, 3))))
+    def oracle(i):
+        return evaluate(target, pool[i], Pipeline(), tmp_path)
+    trace = run_search(pool, oracle, 'raw', 3, [0], 0.999)
+    assert len(trace) == 3
+    assert all(step['status'] == 'compiler_error' for step in trace)
+    assert trace[-1]['best_cx'] is None
+    record = oracle(0)
+    assert record['cache_hit']
+    assert len(record['attempts']) == 3
+    assert 'fidelity_final' not in record and 'cx_count' not in record
+
+
+def test_pilot_hierarchical_seed1_candidate79(tmp_path):
+    from threadpoolctl import threadpool_limits
+    # Captured from the interrupted pilot; does not depend on generated artifacts.
+    tree = canonical(((5, (4, (1, 7))), (6, (2, (0, 3)))))
+    with threadpool_limits(limits=1):
+        record = evaluate(gaussian_target(8, 'hierarchical', 1), tree, Pipeline(), tmp_path)
+    assert record['status'] == 'success'
+    assert record['fidelity_final'] >= 0.999
+    assert record['fidelity_comp'] >= 1 - 0.0004
+    assert all(a.get('fidelity_final', 0) < 0.999 or a['status'] != 'success'
+               for a in record['attempts'][:-1])

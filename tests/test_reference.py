@@ -35,6 +35,7 @@ def test_rank_three_padding_and_physical_order():
     state[[0, 5, 10]] = np.sqrt([0.5, 0.3, 0.2])
     rep = build(state, canonical(((0, 1), (2, 3))))
     assert 3 in rep.ranks
+    assert rep.root.children is not None
     for node in rep.root.children:
         mat = padded_isometry(node)
         np.testing.assert_allclose(mat.conj().T @ mat, np.eye(mat.shape[1]), atol=1e-12)

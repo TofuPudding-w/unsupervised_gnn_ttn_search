@@ -14,7 +14,8 @@ def canonical(tree) -> Tree:
     if not isinstance(tree, (list, tuple)) or len(tree) != 2:
         raise ValueError('Expected a leaf or exactly two children')
     a, b = map(canonical, tree)
-    return tuple(sorted((a, b), key=serialize))
+    ordered = sorted((a, b), key=serialize)
+    return ordered[0], ordered[1]
 
 
 def serialize(tree: Tree) -> str:
@@ -35,7 +36,7 @@ def tree_hash(tree: Tree) -> str:
 
 
 def random_tree(n: int, rng) -> Tree:
-    forest = list(range(n))
+    forest: list[Tree] = list(range(n))
     while len(forest) > 1:
         i, j = sorted(rng.choice(len(forest), 2, replace=False), reverse=True)
         a, b = forest.pop(i), forest.pop(j)
@@ -75,11 +76,14 @@ def candidate_pool(n: int, size: int, seed: int, scent: Tree) -> list[Tree]:
         raise ValueError('Pool size must be positive')
     rng = np.random.default_rng(seed)
     pool = {}
+    # Add the SCENT tree, 
+    # a balanced tree, a comb tree, and all neighbors of the SCENT tree to the pool.
     for t in [scent, balanced(list(range(n))), comb(list(range(n))), *neighbors(scent)]:
         validate(t, n)
         pool.setdefault(tree_hash(t), canonical(t))
         if len(pool) == size:
             return list(pool.values())
+    # Add the random trees until the pool reaches the requested size,
     for _ in range(size * 1000):
         t = random_tree(n, rng)
         pool.setdefault(tree_hash(t), t)
@@ -89,8 +93,13 @@ def candidate_pool(n: int, size: int, seed: int, scent: Tree) -> list[Tree]:
 
 
 def features(tree: Tree) -> np.ndarray:
+    """
+    Extract structural features from a tree.
+    """
     n = len(leaves(tree))
     validate(tree, n)
+    # Get the path from the root to each leaf,
+    # where each path is represented as a tuple of 0s and 1s.
     paths = {}
     def walk(t, path):
         if isinstance(t, int):
@@ -99,6 +108,8 @@ def features(tree: Tree) -> np.ndarray:
             walk(t[0], path + (0,))
             walk(t[1], path + (1,))
     walk(tree, ())
+    # Calculate the pairwise relations between leaves based on their paths,
+    # where the relation is defined as the fraction of common path length to the total path length
     relations = []
     for i in range(n):
         for j in range(i + 1, n):
@@ -108,4 +119,6 @@ def features(tree: Tree) -> np.ndarray:
                     break
                 common += 1
             relations.append(common / n)
+    # The former part of the feature vector is the pairwise relations,
+    # and the latter part is the normalized path lengths for each leaf.
     return np.array(relations + [len(paths[i]) / n for i in range(n)])

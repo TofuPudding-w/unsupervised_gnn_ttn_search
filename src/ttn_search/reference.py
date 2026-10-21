@@ -10,11 +10,12 @@ from .trees import Tree, leaves, canonical, validate
 
 @dataclass
 class Node:
+    # subtree structure
     tree: Tree
     labels: list[int]
     basis: np.ndarray
     local: np.ndarray
-    children: tuple | None
+    children: tuple['Node', 'Node'] | None
 
     @property
     def rank(self):
@@ -35,6 +36,13 @@ def fidelity(a, b):
 
 
 def build(state, tree: Tree, local_discarded_weight: float = 0.0) -> Representation:
+    """
+    Entrance point for building a TTN representation of a quantum state given a tree structure.
+    The representation includes the root node, the flattened state, the ranks of each node, the
+    """
+
+    # 1. Initialize and validate inputs
+
     state = np.asarray(state, dtype=complex)
     n = int(np.log2(len(state)))
     if state.ndim != 1 or len(state) != 2**n or not np.isfinite(state).all() or np.linalg.norm(state) == 0:
@@ -46,11 +54,15 @@ def build(state, tree: Tree, local_discarded_weight: float = 0.0) -> Representat
     state = state / np.linalg.norm(state)
     # Axis q in this tensor is physical qubit q, unlike NumPy's default C-order flattening.
     tensor = state.reshape([2]*n, order='F')
+
+    # 2. Recursively build the TTN representation from the tree structure
+
     nodes = []
     def visit(t, root=False):
-        if isinstance(t, int):
+        # This is a back edge traversal of the tree, where we compute the local isometries and bases for each node.
+        if isinstance(t, int):  # Leaf node
             node = Node(t, [t], np.eye(2, dtype=complex), np.eye(2, dtype=complex), None)
-        else:
+        else:   # Internal node with two children
             a, b = visit(t[0]), visit(t[1])
             labels = a.labels + b.labels
             other = [q for q in range(n) if q not in labels]
@@ -60,6 +72,7 @@ def build(state, tree: Tree, local_discarded_weight: float = 0.0) -> Representat
             if root:
                 coeff = reduced / np.linalg.norm(reduced)
             else:
+                # SVD decomposition
                 u, s, _ = np.linalg.svd(reduced, full_matrices=False)
                 # Always drop numerical zero modes, then the requested absolute discarded weight.
                 numerical_rank = max(1, int(np.count_nonzero(s > max(s[0]*1e-12, 1e-15))))
@@ -90,6 +103,8 @@ def nbits(rank):
 
 
 def padded_isometry(node: Node):
+    if node.children is None:
+        raise ValueError('Padding requires an internal node with two children')
     a, b = node.children
     da, db = 2**nbits(a.rank), 2**nbits(b.rank)
     rows = [i*db+j for i in range(a.rank) for j in range(b.rank)]
@@ -102,6 +117,10 @@ def padded_isometry(node: Node):
 
 
 def compile_reference(rep: Representation, seed=0, optimization_level=1):
+    """
+    Compile a TTN representation into a Qiskit quantum circuit, preserving the physical qubit ordering and using only the 'u' and 'cx' basis gates.
+    The compilation process involves mapping the TTN structure to a sequence of isometries and ensuring
+    """
     n = len(rep.root.labels)
     circuit = QuantumCircuit(n)
     free = list(range(n))

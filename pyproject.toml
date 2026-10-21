@@ -14,3 +14,12 @@ test = ["pytest"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+
+[tool.pyright]
+include = ["src", "tests"]
+# Preserve upstream research code; report diagnostics in our adapter instead.
+ignore = ["vendor/treetensorcomp"]
+extraPaths = ["src", "vendor/treetensorcomp"]
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv"

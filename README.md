@@ -67,6 +67,24 @@ ignored by git; preserve or copy them explicitly when sharing results.
 
 ## Evaluation and accounting
 
+Qiskit synthesis failures (including `TranspilerError`) are recorded as
+`compiler_error` attempts with their exception type, traceback and elapsed
+compilation time. The evaluator proceeds to the next already configured
+tolerance. If no attempt produces a verified feasible circuit, the candidate
+remains unsuccessful and search continues; no fidelity or CX label is invented
+for a compiler failure. Unexpected programming exceptions still propagate.
+
+The larger pilot exposed this case on hierarchical target seed 1, candidate 79.
+Its tree is `((5, (4, (1, 7))), (6, (2, (0, 3))))`. Regression tests now cover
+that candidate, recovery after a synthesis failure, and exhausted failures
+without aborting search. This change handles the backend failure; it does not
+patch Qiskit's synthesis implementation or relax fidelity requirements.
+
+For an interrupted pre-fix run, keep its artifacts and use a new output directory
+such as `artifacts/stage_a_pilot_v2` for the corrected run. The changed evaluator
+changes the source fingerprint, so old evaluation records will not be reused
+automatically. The old measurements remain available for inspection.
+
 The initial reference compiler uses one exact synthesis per tolerance and stops
 at the first feasible tolerance. It has no stochastic restart search. Every
 attempt is recorded, and fidelity and CX refer to the same circuit. Global
@@ -83,6 +101,58 @@ No hard per-candidate wall-clock or memory limit is enforced in this first
 small-system implementation; production resource enforcement is still pending.
 
 ## Next stage A work
+
+Focused follow-up checks are implemented in `scripts/run_focused_checks.py` and
+`scripts/check_compiler_anomaly.py`. They write to `artifacts/stage_a_focused/`
+and leave the pilot artifacts and production compiler settings unchanged.
+The comparison script requires the pilot's evaluator source/software identities
+to match the current environment before reusing its records. The committed
+scripts are outside `src/ttn_search`, so adding analysis code does not invalidate
+evaluation caches. The report audit records the analysis script fingerprints.
+
+```bash
+PYTHONPATH=src MPLCONFIGDIR=/tmp/ttn-matplotlib NUMBA_CACHE_DIR=/tmp/ttn-numba OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python scripts/check_compiler_anomaly.py
+PYTHONPATH=src MPLCONFIGDIR=/tmp/ttn-matplotlib NUMBA_CACHE_DIR=/tmp/ttn-numba OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python scripts/run_focused_checks.py
+PYTHONPATH=src .venv/bin/python scripts/report_focused_checks.py
+```
+
+The focused protocol uses all six development targets for the neighborhood and
+held-out prediction checks, and targets `hierarchical_1` and `overlapping_1` for
+the alternative error allocation. The neighborhood method visits one-hop SCENT
+neighbors after common initialization, then samples randomly; it is not greedy
+local descent. Historical and new cached trajectories are explicitly replay
+comparisons, not measured independent online speedups. The target selection and
+heuristic-heavy held-out pool limit generalization claims.
+
+To evaluate complete small candidate pools before running the larger search:
+
+```bash
+PYTHONPATH=src MPLCONFIGDIR=/tmp/ttn-matplotlib NUMBA_CACHE_DIR=/tmp/ttn-numba OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python -m ttn_search.run_stage_a --config configs/stage_a_diagnostics.json --output artifacts/stage_a_diagnostics
+```
+
+This configuration evaluates all 32 candidates for each of six targets (192
+target–tree requests). `search_seeds: []` skips all search trajectories, so its
+`budget` and `initial_count` fields are unused. The pools follow the existing
+heuristic-first generator; they are not uniformly sampled or source-balanced.
+The report's best value is the optimum of each fully evaluated 32-tree pool,
+not an optimum over all trees. This diagnostic run has not yet been executed.
+
+After inspecting feasibility, cost variation and timing, run the larger search:
+
+```bash
+PYTHONPATH=src MPLCONFIGDIR=/tmp/ttn-matplotlib NUMBA_CACHE_DIR=/tmp/ttn-numba OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python -m ttn_search.run_stage_a --config configs/stage_a_pilot.json --output artifacts/stage_a_pilot
+```
+
+These output directories have separate caches. Rerunning an unchanged command
+reuses its completed candidate records but replays the search from the start;
+it does not resume a saved GP. Source edits change cache keys. The pilot's first
+32 diagnostics are a prefix of its 256-tree pool, not a complete evaluation of
+that pool. No hard candidate timeout or memory cap is implemented yet.
+
+Pyright diagnostics are suppressed only within the unmodified upstream
+`vendor/treetensorcomp` directory via `tool.pyright.ignore`. Import resolution
+and checks of our `src`/`tests` remain enabled. This does not repair or certify
+all upstream execution paths; Stage A uses the tested exact-MI clustering path.
 
 1. Complete balanced diagnostic sampling and the six-target pilot after resource
    calibration; report pool headroom separately from search quality.

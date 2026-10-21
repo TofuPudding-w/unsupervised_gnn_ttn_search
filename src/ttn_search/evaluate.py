@@ -2,6 +2,7 @@
 from dataclasses import asdict, dataclass
 from importlib.metadata import version
 from pathlib import Path
+from typing import Any
 import hashlib
 import json
 import os
@@ -9,6 +10,7 @@ import time
 import traceback
 import numpy as np
 from qiskit import qpy
+from qiskit.exceptions import QiskitError
 from .reference import build, compile_reference, circuit_state, fidelity
 from .trees import tree_hash, serialize
 
@@ -54,6 +56,11 @@ def write_json(path, data):
 
 
 def evaluate(target, tree, pipeline, cache_dir):
+    """
+    Evaluate a single tree against a target state with a fixed pipeline,
+    caching results and artifacts.
+    Returns a record dictionary with fidelity, circuit, and cache information.
+    """
     started = time.perf_counter()
     identity = dict(target_hash=target.hash, tree_hash=tree_hash(tree), pipeline=asdict(pipeline),
                     software_versions=software(), source_hash=source_hash())
@@ -65,10 +72,16 @@ def evaluate(target, tree, pipeline, cache_dir):
         if not result.get('circuit_path') or Path(result['circuit_path']).exists():
             return {**result, 'cache_hit': True, 'lookup_time_s': time.perf_counter()-started}
     directory.mkdir(parents=True, exist_ok=True)
-    attempts, best = [], None
+    # Records combine numeric metrics with status strings, paths and diagnostics.
+    attempts: list[dict[str, Any]] = []
+    best: dict[str, Any] | None = None
     error = 1 - pipeline.fidelity
     for factor in pipeline.tolerance_factors:
-        attempt = dict(tolerance_factor=factor, time_build_s=0., time_compile_s=0., time_verify_s=0.)
+        attempt: dict[str, Any] = dict(
+            tolerance_factor=factor, time_build_s=0., time_compile_s=0., time_verify_s=0.
+        )
+        phase = 'build'
+        start = time.perf_counter()
         try:
             start = time.perf_counter()
             rep = build(target.state, tree, error*pipeline.repr_fraction*factor / max(1, len(target.state).bit_length()-2))
@@ -80,9 +93,11 @@ def evaluate(target, tree, pipeline, cache_dir):
                 attempt['status'] = 'representation_infeasible'
                 attempts.append(attempt)
                 continue
+            phase = 'compile'
             start = time.perf_counter()
             circuit = compile_reference(rep, pipeline.compiler_seed, pipeline.optimization_level)
             attempt['time_compile_s'] = time.perf_counter()-start
+            phase = 'verify'
             start = time.perf_counter()
             output = circuit_state(circuit)
             fc, ff = fidelity(rep.state, output), fidelity(target.state, output)
@@ -103,15 +118,21 @@ def evaluate(target, tree, pipeline, cache_dir):
                 best = dict(attempt)
                 attempts.append(attempt)
                 break
-        except (ValueError, np.linalg.LinAlgError) as exc:
-            attempt.update(status='numerical_error', error=str(exc), traceback=traceback.format_exc())
+        except (QiskitError, ValueError, np.linalg.LinAlgError) as exc:
+            attempt[f'time_{phase}_s'] = time.perf_counter()-start
+            status = 'compiler_error' if isinstance(exc, QiskitError) and phase == 'compile' else 'numerical_error'
+            attempt.update(status=status, error=str(exc), error_type=type(exc).__name__,
+                           failed_phase=phase, traceback=traceback.format_exc())
         attempts.append(attempt)
     if best is None:
         measured = [a for a in attempts if 'fidelity_final' in a]
         if measured:
             best = max(measured, key=lambda a: a['fidelity_final']).copy()
         else:
-            best = dict(status='numerical_error' if any(a['status']=='numerical_error' for a in attempts) else 'representation_infeasible')
+            # Keep the actual operational failure; never invent a fidelity or
+            # label a compiler failure as measured representation infeasibility.
+            failures = [a for a in attempts if a['status'] in ('compiler_error', 'numerical_error')]
+            best = dict(failures[-1] if failures else attempts[-1])
     result = dict(**identity, **best, evaluation_key=key, tree_serialization=serialize(tree),
                   target_metadata=target.metadata, fidelity_method='exact_statevector',
                   attempts=attempts, evaluation_time_s=time.perf_counter()-started,
