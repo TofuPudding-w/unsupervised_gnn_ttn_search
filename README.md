@@ -135,7 +135,7 @@ target–tree requests). `search_seeds: []` skips all search trajectories, so it
 `budget` and `initial_count` fields are unused. The pools follow the existing
 heuristic-first generator; they are not uniformly sampled or source-balanced.
 The report's best value is the optimum of each fully evaluated 32-tree pool,
-not an optimum over all trees. This diagnostic run has not yet been executed.
+not an optimum over all trees. The completed development run is saved in `artifacts/stage_a_diagnostics`.
 
 After inspecting feasibility, cost variation and timing, run the larger search:
 
@@ -163,5 +163,61 @@ all upstream execution paths; Stage A uses the tested exact-MI clustering path.
 4. Examine the alternate precision allocation and exact-synthesis limitations.
 5. Gate GNN training on credible search headroom and useful surrogate predictions.
 
-TCI, the research approximate compiler, GNN training, mixed pretraining and final
-independent experiments are not implemented by this initial stage A delivery.
+TCI, the research approximate compiler, mixed pretraining and final independent
+experiments remain outside the current implementation. Stage B is described below.
+
+## Stage B: structure-only representation pilot
+
+Stage B is implemented in `src/ttn_search/learning/encoder.py` and
+`scripts/run_stage_b.py`. Install CPU PyTorch into the existing environment:
+
+```bash
+.venv/bin/python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+```
+
+Run from the repository root, after the Stage A pilot/focused artifacts exist:
+
+```bash
+GLIBC_TUNABLES=glibc.rtld.optional_static_tls=65536 PYTHONPATH=src MPLCONFIGDIR=/tmp/ttn-matplotlib NUMBA_CACHE_DIR=/tmp/ttn-numba OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python scripts/run_stage_b.py
+.venv/bin/python scripts/report_stage_b.py
+```
+
+The `GLIBC_TUNABLES` setting reserves additional loader TLS space for Qiskit and
+PyTorch in this Linux process; without it this environment reports “cannot
+allocate memory in static TLS block.” It does not change numerical precision.
+Use the same setting when running the combined test suite:
+
+```bash
+GLIBC_TUNABLES=glibc.rtld.optional_static_tls=65536 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python -m pytest -q
+```
+
+Results, checkpoints, corpus, provenance, and traces are written to
+`artifacts/stage_b`; the report is `artifacts/stage_b/REPORT.md`. The runner
+repeats training and search on rerun, reusing matching evaluation caches; it is
+not a training checkpoint resume. Archive that output directory before changing
+the protocol. `requirements-stage-b.lock.txt` records the installed environment;
+CPU torch wheels require the CPU index above.
+
+The pilot uses 2,000 random training trees, 250 validation and 250 test trees,
+excluding all six original candidate pools. Three independent GNN training
+seeds are reported separately. Raw/PCA features and an untrained GNN are controls.
+The encoder has four direction-aware GIN layers, width 64, and an eight-value
+embedding. Only tree features enter its reconstruction pretraining.
+
+Each target uses SCENT plus 127 randomly selected candidates from its original
+pool. All searches share eight initial observations and budgets 16/32/64.
+Held-out prediction uses 8/16 known labels and five shared splits. These remain
+development targets, with offline cache replay; the experiment does not measure
+independent online speedups or justify moving automatically to mixed pretraining.
+The Stage A evaluator is unchanged; Stage B code has separate provenance in its
+protocol because the legacy evaluator fingerprint covers only direct package files.
+
+After the run, audit the saved results:
+
+```bash
+GLIBC_TUNABLES=glibc.rtld.optional_static_tls=65536 PYTHONPATH=src OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python scripts/audit_stage_b.py
+```
+
+This checks corpus/candidate separation, shared initialization, no repeated search
+queries, incumbent values against cached labels, and trained-encoder permutation
+invariance, label sensitivity, finite outputs, and latent variation.

@@ -138,3 +138,32 @@ Test canonical identity and leaf coverage; dense reconstruction and isometry dir
 ## Work estimate and status
 
 A first research cycle may take 4–6 weeks if a usable compiler is available; reproducing approximate synthesis is separately estimated after its audit. The immediate deliverable is trustworthy small-system data and evidence of search headroom, followed by GNN and mixture validation. Execution status and measured results belong in artifact reports and README, not as assumed outcomes in this plan.
+
+## Stage B execution protocol (2026-10-21)
+
+The first representation pilot uses 2,000 random training trees and separate
+250-tree validation/test splits, excluding all structures in the six original
+candidate pools. Train three seeds for 100 epochs; select each checkpoint solely
+by structural validation loss. Compare raw, PCA, frozen trained GNN, and an
+untrained GNN, fitting their scalers to the same training corpus.
+
+To remove the earlier heuristic-prefix bias, each downstream pool is SCENT plus
+127 uniformly sampled candidates from its original 256-tree pool, chosen without
+cost labels. Fully evaluate these pools for held-out prediction (8/16 known
+labels, five splits) and replay search (common eight initial points, three seeds,
+budgets 16/32/64). Random and one-hop-neighborhood-first search remain baselines.
+This smaller-pool experiment is compared internally, not directly against Stage A
+endpoints. All six targets are development targets. Training-seed repeats are not
+independent target samples. Feasibility discrimination can only be assessed if
+infeasible candidates occur. Do not advance to mixed pretraining based on
+reconstruction loss alone. Scripts, exact protocol, training curves, checkpoints,
+labels, and trace audit are part of the delivery.
+
+Stage B pilot outcome: implemented and run with all three training seeds, 144
+search trajectories, 360 prediction fits, and an independent audit of 9,216
+search steps. Reconstruction improves over a constant-mean predictor, but the
+learned embeddings do not consistently outperform simpler search baselines.
+The gate to Stage C / 10,000-tree pretraining is **not met**. See
+`artifacts/stage_b/REPORT.md` for per-target results, limitations and follow-up
+recommendations. This is a negative development result for the tested setup,
+not a general rejection of learning-based tree search.
