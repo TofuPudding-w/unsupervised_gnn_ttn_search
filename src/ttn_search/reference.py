@@ -121,16 +121,24 @@ def compile_reference(rep: Representation, seed=0, optimization_level=1):
     Compile a TTN representation into a Qiskit quantum circuit, preserving the physical qubit ordering and using only the 'u' and 'cx' basis gates.
     The compilation process involves mapping the TTN structure to a sequence of isometries and ensuring
     """
+
+    # 1. Initialize the circuit and prepare for isometry synthesis
+
     n = len(rep.root.labels)
-    circuit = QuantumCircuit(n)
-    free = list(range(n))
-    physical_to_logical = {}
+    circuit = QuantumCircuit(n)     # Initialize a quantum circuit with n qubits, all starting in the |0> state.
+    free = list(range(n))           # A free list of qubit indices available for isometry synthesis, initially containing all qubits.
+    physical_to_logical = {}        # Record the mapping from physical qubit indices to logical qubit indices in the TTN representation.
+
+    # 2. Core isometry synthesis: 
+    # recursively emit isometries for each node in the TTN representation
+    
     def emit(node, incoming):
-        if node.children is None:
+        if node.children is None:       # Leaf node
             if len(incoming) != 1:
                 raise ValueError('Physical leaf must own one wire')
             physical_to_logical[incoming[0]] = node.tree
             return
+        # Internal node with two children
         a, b = node.children
         total = nbits(a.rank) + nbits(b.rank)
         need = total - len(incoming)
@@ -138,17 +146,25 @@ def compile_reference(rep: Representation, seed=0, optimization_level=1):
             raise ValueError('Invalid isometry register allocation')
         wires = incoming + free[:need]
         del free[:need]
+        # Add isometry to the circuit, using the padded isometry matrix for the current node.
         mat = padded_isometry(node)
         if total:
             circuit.append(Isometry(mat, 0, 0), wires)
         else:
             circuit.global_phase += float(np.angle(mat[0, 0]))
+        # Recursively emit isometries for the child nodes, splitting the wires according to their ranks.
         right_bits = nbits(b.rank)
         emit(a, wires[right_bits:])
         emit(b, wires[:right_bits])
+
+    # 3. Start the recursive emission from the root node, using all available qubits
+    
     emit(rep.root, [])
     if free or set(physical_to_logical.values()) != set(range(n)):
         raise ValueError('Incomplete physical output mapping')
+
+    # 4. Transpile the circuit to the desired basis gates and optimization level, preserving the physical qubit ordering.
+    
     # All input wires are |0>; consistently relabel the whole circuit, without adding artificial SWAPs.
     logical = QuantumCircuit(n)
     logical.global_phase = circuit.global_phase
