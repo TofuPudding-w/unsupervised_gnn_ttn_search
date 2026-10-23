@@ -21,6 +21,11 @@ def reduced_density(state, labels):
 
 
 def entropy(rho):
+    """
+    Compute the von Neumann entropy of a density matrix rho.
+    The entropy is defined as S(rho) = -Tr(rho log2 rho),
+    where Tr is the trace and log2 is the base-2 logarithm.
+    """
     values = np.clip(np.linalg.eigvalsh(rho), 0, 1)
     values = values[values > 1e-15]
     return float(-np.sum(values * np.log2(values)))

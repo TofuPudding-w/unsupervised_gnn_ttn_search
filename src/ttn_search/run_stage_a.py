@@ -14,10 +14,16 @@ from .search import initial_ids, run_search
 
 
 def run(config, output):
+
+    # 1. Validate config
+
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
     start = time.perf_counter()
     pipeline = Pipeline(**config.get('pipeline', {}))
+
+    # 2. Write manifest
+
     manifest = dict(config=config, pipeline=asdict(pipeline), software=software(), source_hash=source_hash(),
                     platform=platform.platform(), threads=1,
                     limitations=['reference exact compiler only', 'SCENT exact-MI variant',
@@ -25,21 +31,33 @@ def run(config, output):
                     'small development run; no statistical learning claim',
                     'no hard per-candidate timeout or memory cap yet'])
     write_json(output/'manifest.json', manifest)
+
+    # 3. Run targets and searches
+
     summaries = []
     for family in config['families']:
         for target_seed in config['target_seeds']:
+            # Build target
             target = gaussian_target(config['n'], family, target_seed)
             task = output/f'{family}_{target_seed}'
             task.mkdir(exist_ok=True)
+            # Build the SCENT tree from target state
             scent, scent_info = scent_tree(target.state, config['pool_seed'])
             pool_start = time.perf_counter()
+            # Build candidate pool using SCENT tree
             pool = candidate_pool(config['n'], config['pool_size'], config['pool_seed'], scent)
             pool_time = time.perf_counter()-pool_start
             write_json(task/'target.json', target.metadata)
             write_json(task/'pool.json', dict(trees=[serialize(t) for t in pool], scent=scent_info,
                                              time_pool_s=pool_time))
+
+            # 4. Evaluate candidates and run searches
+            # Model training needs a initial pool of candidates
+            # Before running searches, evaluate candidates in the pool and cache results.
+
             results = {}
             def oracle(i):
+                # Evaluate candidate i and cache the result
                 rec = evaluate(target, pool[i], pipeline, output/'cache')
                 results[i] = rec
                 print(f'{family}/{target_seed} tree={i} {rec["status"]} '
@@ -50,12 +68,18 @@ def run(config, output):
             for i in range(diagnostic):
                 oracle(i)
             if 0 not in results:
+                # Ensure at least one candidate is evaluated for search initialization
                 oracle(0)
+
+            # 5. Run searches with different methods and seeds, recording trajectories
+
             trajectories = {}
             for seed in config['search_seeds']:
                 init = initial_ids(len(pool), config['initial_count'], seed)
                 for method in ('random', 'raw', 'pca'):
                     name = f'{method}_{seed}'
+                    # Run the search and record the trajectory, 
+                    # writing intermediate results to JSON files
                     trace = run_search(pool, oracle, method, config['budget'], init, pipeline.fidelity, seed,
                         on_step=lambda trace, name=name: write_json(task/f'{name}.json', trace))
                     trajectories[name] = trace[-1]

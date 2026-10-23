@@ -1,0 +1,13 @@
+{
+  "transition_target": "overlapping_4",
+  "transition_cnot_pair": [504, 279],
+  "tolerance_multipliers": [0.8, 0.9, 1.0, 1.1, 1.2],
+  "gnn_epochs": 300,
+  "gnn_seeds": [0, 1, 2],
+  "known_counts": [8, 16],
+  "split_seeds": [0, 1, 2, 3, 4],
+  "search_seeds": [0, 1, 2],
+  "search_budgets": [16, 32, 64],
+  "recommendations": 5,
+  "descriptor_names": ["max_rank", "sum_rank", "parameters", "sum_input_bits", "sum_output_bits", "max_output_bits", "sum_padded_entries", "max_padded_entries"]
+}

@@ -221,3 +221,85 @@ GLIBC_TUNABLES=glibc.rtld.optional_static_tls=65536 PYTHONPATH=src OPENBLAS_NUM_
 This checks corpus/candidate separation, shared initialization, no repeated search
 queries, incumbent values against cached labels, and trained-encoder permutation
 invariance, label sensitivity, finite outputs, and latent variation.
+
+## New-target neighborhood validation
+
+The fixed configuration is `configs/neighborhood_validation.json`: five new
+instances per existing family, seeds 3–7, three search seeds, and 8/16/32
+additional evaluations after a common SCENT start. There is no fixed candidate
+pool. The iterative method accepts strict improvements immediately and uses
+random fallback after exhausting unseen neighbors. Failed evaluations count.
+
+```bash
+PYTHONPATH=src MPLCONFIGDIR=/tmp/ttn-matplotlib NUMBA_CACHE_DIR=/tmp/ttn-numba OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python scripts/run_neighborhood_validation.py
+PYTHONPATH=src MPLCONFIGDIR=/tmp/ttn-matplotlib NUMBA_CACHE_DIR=/tmp/ttn-numba OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python scripts/analyze_neighborhood_validation.py
+```
+
+Artifacts and report are in `artifacts/neighborhood_validation`. The runner
+refuses to mix changed protocols in that directory. Reruns replay trajectories
+and reuse matching evaluations; they do not resume a partially completed search.
+Actual wall time includes cache effects and is not an independent online timing
+comparison. Mechanism analysis selects the first improving and first feasible
+non-improving neighbor from iterative seed 0, and records partition changes,
+node ranks and separately synthesized local costs alongside final circuit costs.
+
+## Bounded decision experiment before Stage C expansion
+
+The frozen settings are in `configs/decision_experiment.json`. Two independent
+runners write to `artifacts/decision_experiment/cost` and `/gnn`:
+
+```bash
+PYTHONPATH=src MPLCONFIGDIR=/tmp/ttn-matplotlib NUMBA_CACHE_DIR=/tmp/ttn-numba OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python scripts/decision_cost.py
+GLIBC_TUNABLES=glibc.rtld.optional_static_tls=65536 PYTHONPATH=src MPLCONFIGDIR=/tmp/ttn-matplotlib NUMBA_CACHE_DIR=/tmp/ttn-numba OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python scripts/decision_gnn.py
+.venv/bin/python scripts/decision_report.py
+```
+
+The cost runner reproduces a two-tree transition under five truncation tolerances,
+then extracts construction-only descriptors from saved evaluations and tests
+held-out ranking and static screening. No compiled counts or successful-retry
+ranks enter descriptor inputs. Primary new-target tests use only the global-random
+samples plus SCENT, not adaptively selected neighborhood trees. Feature-based
+screening pays for construction of the whole candidate set.
+
+The GNN runner restarts all three original seeds for 300 epochs on the unchanged
+corpus, verifies reproduction of the original first 100 epochs, and evaluates
+selected checkpoints with unchanged downstream settings. It does not resume Adam
+from a weights-only checkpoint. Both runners reject changed protocols in the same
+output directory; rerunning repeats computation. Stage C expansion remains on hold.
+
+Audit the completed decision experiment with:
+
+```bash
+PYTHONPATH=src OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python scripts/audit_decision_experiment.py
+```
+
+The audit verifies recommendation eligibility and regret, label-free score order,
+whole-pool construction charging, screening endpoints, local dimensions, and
+paired GNN initialization/incumbents. The fixed padded-size score is a reference-
+compiler diagnostic, not a claim of transfer to the SCENT approximate compiler.
+
+## Fresh end-to-end screening benchmark
+
+`configs/screening_benchmark.json` freezes untouched target seeds 8–12, shared
+128-tree pools (SCENT plus random trees), three repetitions, and candidate/call
+budgets 1/2/4/8/16. Each method runs independently without outcome caches. Screeners
+reuse only TTNs they constructed themselves. Method order is randomized, and
+actual elapsed-time comparisons include generation, full prescreening, model
+loading/inference where used, compilation, retries, verification and artifact I/O.
+
+```bash
+GLIBC_TUNABLES=glibc.rtld.optional_static_tls=65536 PYTHONPATH=src MPLCONFIGDIR=/tmp/ttn-matplotlib NUMBA_CACHE_DIR=/tmp/ttn-numba OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python scripts/run_screening_benchmark.py
+PYTHONPATH=src MPLCONFIGDIR=/tmp/ttn-matplotlib OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python scripts/report_screening_benchmark.py
+```
+
+Outputs are in `artifacts/screening_benchmark`. Completed method runs may be
+resumed by rerunning an unchanged protocol; an unfinished method reruns its
+computations, never reuses partial circuit labels. Frozen GNN checkpoints and
+scalers use only old training data. SCENT-only is a one-candidate baseline.
+See `POST_STAGE_B_GUIDE.md` for the experiment history and detailed code walkthrough.
+
+Audit the fresh benchmark after completion:
+
+```bash
+PYTHONPATH=src OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python scripts/audit_screening_benchmark.py
+```

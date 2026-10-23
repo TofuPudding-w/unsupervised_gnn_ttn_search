@@ -12,8 +12,15 @@ from .trees import Tree, leaves, canonical, validate
 class Node:
     # subtree structure
     tree: Tree
+    # physical qubit labels in this subtree, in ascending order
     labels: list[int]
+    # the dense basis for this node, 
+    # mapping from the tensor product of its children's bases 
+    # to the full Hilbert space
     basis: np.ndarray
+    # represents the local isometry for this node, 
+    # mapping from the tensor product of its children's bases 
+    # to its own basis
     local: np.ndarray
     children: tuple['Node', 'Node'] | None
 
@@ -26,8 +33,12 @@ class Node:
 class Representation:
     root: Node
     state: np.ndarray
+    # The ranks of the nodes in the TTN representation, excluding the root node.
     ranks: list[int]
+    # The total number of parameters in the TTN representation,
+    # which is the sum of the sizes of the local isometries for all nodes.
     parameter_count: int
+    # The maximum isometry error across all nodes in the TTN representation.
     isometry_error: float
 
 
@@ -39,6 +50,15 @@ def build(state, tree: Tree, local_discarded_weight: float = 0.0) -> Representat
     """
     Entrance point for building a TTN representation of a quantum state given a tree structure.
     The representation includes the root node, the flattened state, the ranks of each node, the
+    total number of parameters, and the maximum isometry error across all nodes.
+    ----
+    Parameters:
+    - state: A 1D numpy array representing the quantum state vector.
+    - tree: A tree structure defining the TTN representation.
+    - local_discarded_weight: The maximum allowed discarded weight for local isometries
+    ----
+    Returns:
+    - A Representation object containing the root node, the flattened state, the ranks of each node
     """
 
     # 1. Initialize and validate inputs
@@ -53,7 +73,7 @@ def build(state, tree: Tree, local_discarded_weight: float = 0.0) -> Representat
     validate(tree, n)
     state = state / np.linalg.norm(state)
     # Axis q in this tensor is physical qubit q, unlike NumPy's default C-order flattening.
-    tensor = state.reshape([2]*n, order='F')
+    tensor = state.reshape([2]*n, order='F')    # (2, 2, ..., 2) shape for n qubits
 
     # 2. Recursively build the TTN representation from the tree structure
 
@@ -66,18 +86,26 @@ def build(state, tree: Tree, local_discarded_weight: float = 0.0) -> Representat
             a, b = visit(t[0]), visit(t[1])
             labels = a.labels + b.labels
             other = [q for q in range(n) if q not in labels]
+            # Unfold the tensor to matrix M along the axes corresponding to the current node's labels and the remaining axes.
             unfolding = tensor.transpose(labels + other).reshape(2**len(labels), -1)
+            # P = B_a \otimes B_b
             product = np.kron(a.basis, b.basis)
+            # M_reduced = P^dagger M, where P^dagger is the conjugate transpose of P.
             reduced = product.conj().T @ unfolding
             if root:
+                # At the root, don't need to truncate; 
+                # just normalize the reduced matrix.
                 coeff = reduced / np.linalg.norm(reduced)
             else:
                 # SVD decomposition
-                u, s, _ = np.linalg.svd(reduced, full_matrices=False)
+                u, s, _ = np.linalg.svd(reduced, full_matrices=False, compute_uv=True)
                 # Always drop numerical zero modes, then the requested absolute discarded weight.
                 numerical_rank = max(1, int(np.count_nonzero(s > max(s[0]*1e-12, 1e-15))))
                 rank = numerical_rank
                 for k in range(1, numerical_rank + 1):
+                    # Adaptive truncation.
+                    # When the sum of the squares of the singular values of rank k
+                    # is less than or equal to the local discarded weight, we can truncate at rank k.
                     if np.sum(s[k:]**2) <= local_discarded_weight:
                         rank = k
                         break
@@ -91,8 +119,13 @@ def build(state, tree: Tree, local_discarded_weight: float = 0.0) -> Representat
         if node.children is None:
             return node.local
         return np.kron(*(reconstruct(c) for c in node.children)) @ node.local
+    # The reconstructed dense state should match the original state up to numerical precision.
     dense = reconstruct(root).reshape([2]*n)
+    # The final state is obtained by transposing the dense tensor back 
+    # to the original qubit order and flattening it.
     ordered = dense.transpose(np.argsort(root.labels)).flatten(order='F')
+    # The maximum isometry error across all nodes 
+    # is computed as the maximum norm of the difference between the product of the local isometry and its conjugate transpose and the identity matrix.
     error = max(float(np.linalg.norm(x.local.conj().T @ x.local - np.eye(x.local.shape[1]))) for x in nodes)
     return Representation(root, ordered, [x.rank for x in nodes if x is not root],
                           sum(x.local.size for x in nodes), error)
@@ -103,6 +136,12 @@ def nbits(rank):
 
 
 def padded_isometry(node: Node):
+    """
+    Pad the local isometry of a node to a full isometry matrix 
+    that maps from the tensor product of its children's bases to the full Hilbert space.
+    The padding is done by adding orthonormal vectors to the isometry matrix to make it
+    a square matrix, ensuring that it is a valid isometry.
+    """
     if node.children is None:
         raise ValueError('Padding requires an internal node with two children')
     a, b = node.children
@@ -141,6 +180,7 @@ def compile_reference(rep: Representation, seed=0, optimization_level=1):
         # Internal node with two children
         a, b = node.children
         total = nbits(a.rank) + nbits(b.rank)
+        # How many more qubits do we need to allocate for this isometry
         need = total - len(incoming)
         if need < 0 or need > len(free):
             raise ValueError('Invalid isometry register allocation')
@@ -168,6 +208,8 @@ def compile_reference(rep: Representation, seed=0, optimization_level=1):
     # All input wires are |0>; consistently relabel the whole circuit, without adding artificial SWAPs.
     logical = QuantumCircuit(n)
     logical.global_phase = circuit.global_phase
+    # Relabeling the circuit to match the physical qubit ordering, 
+    # ensuring that the logical qubits correspond to the correct physical qubits in the final circuit.
     for instruction in circuit.data:
         logical.append(instruction.operation,
             [physical_to_logical[circuit.find_bit(q).index] for q in instruction.qubits])

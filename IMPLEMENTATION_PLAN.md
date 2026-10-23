@@ -98,6 +98,8 @@ Test internal-renumbering/sibling invariance, physical-label sensitivity, embedd
 
 ## Stage C: mixed structural pretraining (revised idea §6.3)
 
+**Status: on hold.** Run the bounded decision experiment below before corpus scaling or mixed pretraining.
+
 Target unique proportions are random/SCENT/SCENT-perturbation = 70/10/20. Pilot counts are 1,400/200/400; full counts 7,000/1,000/2,000. These are post-deduplication targets, not replication quotas. Bound generation effort; fill unresolved deficits with random structures and report actual proportions.
 
 SCENT parents come from an isolated pretraining target library. Run only necessary affinity/tree discovery, not subsequent TCI or circuit evaluation. Account separately for expensive prerequisites. Descendants use 1–3 legal reconnections and a per-parent cap, preserve labels, and require no target refitting. SCENT provenance is not a quality label.
@@ -167,3 +169,124 @@ The gate to Stage C / 10,000-tree pretraining is **not met**. See
 `artifacts/stage_b/REPORT.md` for per-target results, limitations and follow-up
 recommendations. This is a negative development result for the tested setup,
 not a general rejection of learning-based tree search.
+
+## Next experiment: neighborhood validation on new instances
+
+Freeze `configs/neighborhood_validation.json` before evaluation: n=8,
+existing hierarchical/overlapping generators with unseen seeds 3–7, search
+seeds 0–2, and 8/16/32 additional unique evaluations beyond SCENT. Use no
+prebuilt candidate pool. Compare global random pair-merging trees, random-order
+one-hop SCENT neighbors followed by global random fallback, and iterative
+first-improvement neighborhood search. Iterative random fallback improvements
+also change its incumbent; report this restart behavior explicitly. All methods
+use the same reference evaluator and charge failures against their budgets.
+
+This experiment validates new instances within known families. It is not a
+larger-system or new-family test and does not establish novelty. Shared caches
+reduce computation; report measured execution and charged evaluation times
+separately without claiming independent online speedups. Preserve per-target
+results and aggregate search seeds within each target.
+
+For mechanism analysis, preselect the first successful improving neighbor and
+first feasible non-improving neighbor from iterative search seed 0 per target.
+Record removed/added leaf partitions, node ranks, parameter counts, tolerance
+attempt, final fidelity/CNOT, and standalone local synthesis costs. Separate
+local counts from the globally optimized circuit; their sum need not match.
+After this validation, decide whether a bounded fixed-data GNN training extension
+is still informative. No mixed-pretraining expansion is authorized by these
+results alone.
+
+Neighborhood validation completed on the ten declared new instances: 90
+trajectories, 2,056 unique target–tree evaluations, and 2,880 additional search
+steps. All hierarchical runs retain SCENT's 75 CNOT. At 32 additional evaluations,
+initial-neighborhood search loses to random on all five overlapping targets.
+Iterative search wins the mean (344.73 versus 354.13 CNOT), but wins on only one
+target and loses on four. On that winning target, all three seeds reach 273
+through local moves. A post-result mechanism case study examines the 9-to-8 rank
+transition and its change from four to three padded bond-register qubits.
+These results narrow the research signal to multi-step, instance-dependent
+improvements; they do not establish a general neighborhood-search advantage.
+Full evidence and limitations are in `artifacts/neighborhood_validation/REPORT.md`.
+
+## Stage C expansion on hold: bounded decision experiment
+
+Do not scale the pretraining corpus or start mixed random–SCENT pretraining yet.
+Run `configs/decision_experiment.json` first, with three fixed components:
+
+1. Reproduce the 504→279 transition on overlapping_4 and compare per-node local
+   synthesis. Sweep local truncation tolerance by 0.8/0.9/1.0/1.1/1.2 while
+   retaining the original global error requirements; use one attempt per setting
+   to isolate sensitivity rather than hiding it behind retries.
+2. Extract first-attempt, target-dependent rank/width/isometry-dimension
+   descriptors across saved evaluations. Measure construction overhead. Primary
+   held-out tests use the complete Stage B pools and SCENT plus global-random
+   samples on the ten new instances. Exclude adaptive neighborhood samples from
+   primary prediction metrics, retain them in the extraction audit, and report
+   counterexamples as well as favorable cases. Compare fixed parameter/padded-size
+   screening and a small GP against topology features and random selection.
+3. Keep the original 2,000 training trees, validation/test splits, architecture,
+   optimizer and seeds fixed; compare 100 with 300 epochs. Since saved checkpoints
+   lack optimizer state, rerun from the same initial seeds and require the first
+   100 epoch histories to reproduce before interpreting the extension. Select
+   checkpoints only by reconstruction validation loss, then use identical Stage B
+   held-out splits and search trajectories. No data-size or architecture tuning.
+
+Descriptors are not free topology features: screening constructs every candidate
+in the compared set, and that cost must be reported. Existing development labels
+and adaptive-union data do not constitute independent test evidence. If extended
+training improves only reconstruction, pause this pretraining recipe. If simple
+rank/width screening works reliably, implement and validate that simpler method
+before adding learning. Pool enlargement is deferred.
+
+Decision-experiment outcome: the 504→279 cost transition survives the tested
+±20% tolerance sweep. Two local blocks explain the 225-gate difference. Across
+existing overlapping targets, first-build padded-isometry sizes achieve strong
+within-target ranking and low recommendation regret at millisecond-scale dense
+construction cost; the learned rank/width GP did not beat the fixed score on
+retrieval. This supports validating simple screening before adding learning.
+
+The 300-epoch GNN runs reproduce their original first 100 epochs exactly.
+Reconstruction improves in all seeds; budget-64 search also improves in all three
+seed means, so this is not a reconstruction-only result. Small-budget and
+held-out retrieval improvements remain inconsistent, and the strongest existing
+baseline is not beaten. Retain extended models as secondary baselines; keep
+mixed pretraining and corpus scaling on hold. Full results, counterexamples,
+construction accounting, and limitations: `artifacts/decision_experiment/REPORT.md`.
+
+## Frozen screening benchmark after the decision experiment
+
+Stage C scaling and mixed pretraining remain on hold. The authorized next test is
+`configs/screening_benchmark.json`: ten untouched eight-qubit instances (seeds
+8–12 in both existing families), three repetitions, and identical pools of SCENT
+plus 127 unique random pair-merge trees. No neighborhood enrichment is inserted.
+
+Compare SCENT alone, random order, SCENT-initialized random order, parameter-count
+screening, padded-size screening, and all three frozen extended GNN models.
+Fixed screening requires no circuit labels and no forced SCENT compilation.
+Construct each screened TTN once and reuse it for its first compilation attempt;
+retain the original fidelity checks and tolerance retries.
+
+Run each method independently with no shared representation or outcome cache.
+Report K=1/2/4/8/16 candidate budgets, actual synthesis-call budgets including
+retries, and actual elapsed-time prefixes. Charge pool generation, whole-pool
+screening, model setup, ranking/proposals, compilation, retries, verification and
+artifact writing. Report common/offline setup separately. Methods stop at sixteen
+candidates, so time curves are bounded-shortlist comparisons. Randomize execution
+order; freeze models and all settings before obtaining new target labels.
+
+Audit score ordering, identical pools, reuse accounting, fidelity and best-so-far
+prefixes. The complete experiment/code walkthrough is `POST_STAGE_B_GUIDE.md`;
+results and timings are in `artifacts/screening_benchmark/REPORT.md`. The next
+scientific decision is whether the fixed screeners justify a modest larger-system
+or different-compiler validation, not automatic resumption of mixed pretraining.
+
+Screening outcome: all 180 runs completed and passed the artifact audit; 2,430
+candidate evaluations required 2,495 compiler calls, including 65 retries.
+All final fidelities meet 0.999 (minimum 0.999892416027). On untouched overlapping
+targets, padded versus parameter screening gives mean CNOT 352.00 versus 456.20
+at K=1, 345.93 versus 372.93 at K=4, and the same 339.80 at K=16. At two seconds,
+including construction and verification, all runs have results: padded 347.33,
+parameters 428.00, random 412.07, SCENT-initialized random 480.53, frozen GNN BO
+495.67. The advantage is earlier useful selection, not a better final endpoint
+than parameter screening. Hierarchical SCENT is already strong (75.8 versus
+screeners' 75.2). Prioritize a modest generalization check; retain the Stage C hold.

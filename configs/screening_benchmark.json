@@ -1,0 +1,14 @@
+{
+  "n": 8,
+  "families": ["hierarchical", "overlapping"],
+  "target_seeds": [8, 9, 10, 11, 12],
+  "pool_size": 128,
+  "pool_seed": 20261024,
+  "repeats": [0, 1, 2],
+  "candidate_budgets": [1, 2, 4, 8, 16],
+  "compiler_call_budgets": [1, 2, 4, 8, 16],
+  "time_budgets_s": [0.5, 1, 2, 4, 8, 16],
+  "methods": ["scent", "random", "random_scent", "parameters", "padded", "frozen_gnn_bo"],
+  "scent_seed": 0,
+  "gnn_model_for_repeat": [0, 1, 2]
+}

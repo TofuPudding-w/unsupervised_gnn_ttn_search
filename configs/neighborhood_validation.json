@@ -1,0 +1,30 @@
+{
+  "n": 8,
+  "families": [
+    "hierarchical",
+    "overlapping"
+  ],
+  "target_seeds": [
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "search_seeds": [
+    0,
+    1,
+    2
+  ],
+  "additional_budgets": [
+    8,
+    16,
+    32
+  ],
+  "methods": [
+    "random",
+    "initial_neighborhood",
+    "iterative_neighborhood"
+  ],
+  "scent_seed": 0
+}
