@@ -303,3 +303,71 @@ Audit the fresh benchmark after completion:
 ```bash
 PYTHONPATH=src OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python scripts/audit_screening_benchmark.py
 ```
+
+## Revised Stage C1: scaling pilot
+
+Run `PYTHONPATH=src MPLCONFIGDIR=/tmp/ttn-matplotlib NUMBA_CACHE_DIR=/tmp/ttn-numba OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python scripts/run_stage_c1.py`.
+Settings are frozen in `configs/stage_c1.json`; results go to `artifacts/stage_c1`.
+This starts with two 10-qubit targets and five non-GNN baselines. Independent
+fixed-evaluation and hard-deadline experiments use the same 128-tree pools.
+Time runs continue beyond 16 evaluations when possible. Interrupted computations
+are excluded from verified result prefixes. The fixed-evaluation safety ceiling
+is 300 seconds per method; the time budget is 30 seconds. Inspect `controlled.json`
+for each method, `runs.json` for aggregate progress, and `completion.json` for
+completion. A missing checkpoint is not a failed-fidelity measurement.
+Twelve qubits and a different compiler are subsequent decisions; GNN expansion
+remains on hold. The required fidelity is 0.999.
+
+### Offline C1 pool-headroom diagnostic
+
+```bash
+PYTHONPATH=src MPLCONFIGDIR=/tmp/ttn-matplotlib NUMBA_CACHE_DIR=/tmp/ttn-numba OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python scripts/diagnose_c1_pool.py
+```
+
+This completes the existing overlapping seed-13 pool without changing its trees.
+Outputs and `REPORT.md` are in `artifacts/stage_c1_headroom`. Existing completed
+records are reused under a frozen selection rule. Missing candidates receive the
+original evaluation policy with a 60-second ceiling; timeouts and operational
+errors remain separate from infeasibility. New compiler starts are flushed before
+synthesis. This is offline headroom analysis, not a fresh online timing benchmark.
+
+### Accuracy-budget and alternative-synthesis development probe
+
+```bash
+PYTHONPATH=src MPLCONFIGDIR=/tmp/ttn-matplotlib NUMBA_CACHE_DIR=/tmp/ttn-numba OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python scripts/compilation_probe.py
+python3 scripts/report_compilation_probe.py
+```
+
+The fixed three-tree probe writes to `artifacts/compilation_probe`; completed
+configurations resume only under identical provenance. It compares local tolerance
+multipliers and full-unitary QSD completion, while checking final fidelity and
+recording original sub-budget compliance separately. It does not change the
+benchmark evaluator. Block-analysis timing includes extra synthesis work and
+must not be interpreted as a production compiler speed comparison.
+
+## Revised policy validation and matched-update GNN study
+
+```bash
+PYTHONPATH=src MPLCONFIGDIR=/tmp/ttn-matplotlib NUMBA_CACHE_DIR=/tmp/ttn-numba OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python scripts/validate_revised_policy.py
+python3 scripts/report_revised_policy.py
+GLIBC_TUNABLES=glibc.rtld.optional_static_tls=65536 PYTHONPATH=src MPLCONFIGDIR=/tmp/ttn-matplotlib NUMBA_CACHE_DIR=/tmp/ttn-numba OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python scripts/run_revised_gnn.py
+```
+
+The evaluator requires all original global accuracy budgets and tries local
+multipliers 3/1/0.1/0 in that order. Reports/artifacts are under
+`artifacts/revised_policy` and `artifacts/revised_gnn`. Completed items resume
+under unchanged provenance. The GNN study trains size-specific ten-qubit models
+on 2000 and 10000 trees with matched updates, then measures fresh independent
+fixed-evaluation search on five untouched targets. This is not mixed pretraining
+or an uncapped fixed-time benchmark.
+
+After the GNN study completes, generate its report and run its artifact audit:
+
+```bash
+PYTHONPATH=src MPLCONFIGDIR=/tmp/ttn-matplotlib OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python scripts/report_revised_gnn.py
+```
+
+The report compares matched-update reconstruction, per-target CNOT/depth,
+fixed-evaluation quality, measured online costs, and paired data-size effects.
+It verifies source/model fingerprints, corpus separation, accuracy requirements,
+incumbent histories and logged synthesis attempts before reporting results.

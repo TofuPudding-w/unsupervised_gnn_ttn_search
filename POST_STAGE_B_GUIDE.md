@@ -332,3 +332,54 @@ They do not establish a global pool optimum, transfer to larger systems, or
 transfer to SCENT's approximate compiler. The next useful generalization test is
 a modestly larger system or different compilation backend; larger/mixed GNN
 pretraining remains on hold.
+
+## 10. Revised precision policy and resumed bounded GNN comparison
+
+The later development probe changes local truncation tolerance while retaining
+all global accuracy requirements. `scripts/revised_policy.py` defines the shared
+attempt sequence 3/1/0.1/0, stopping at the first verified feasible circuit. It
+wraps synthesis with a flushed start log so retries can be audited. It delegates
+construction, fidelity checks and error handling to the existing evaluator.
+Representation error must remain ≤0.0001, compilation error ≤0.0004, and final
+fidelity ≥0.999. First-3× representations are reused by screening; costs for
+rejected attempts remain charged.
+
+`scripts/validate_revised_policy.py` first compares direct 1× and 3× compilation
+on six development instances (both families, eight and ten qubits), using three
+fixed trees per instance. It then rebuilds the original 128-tree overlapping pool
+under the complete policy. Descriptors use the first 3× build, never the accepted
+retry's hindsight information. The [policy report](artifacts/revised_policy/REPORT.md)
+records the failure that required 1× fallback and the new 592-CNOT/436-depth
+SCENT frontier point.
+
+The previously open-ended training hold is superseded only for the authorized
+bounded random-data ablation in `scripts/run_revised_gnn.py`; mixed pretraining
+is still deferred. `Encoder(n=10)` uses 19 nodes, 15 node features and 55 decoder
+outputs. New ten-qubit models are trained; eight-qubit weights are not transferred.
+The 2000-tree corpus is a subset of the 10000-tree corpus, and both use common,
+disjoint 500-tree validation/test sets. All target-pool topologies are excluded.
+
+`train_model` samples batches of 128 with replacement, trains for 1600 updates,
+and checks validation every 100 updates. The same architecture, optimizer and
+three seeds are used for both sizes. It selects the checkpoint using structural
+validation loss only, then exports embeddings/scaler statistics from the common
+2000-tree subset. Equal update count controls optimization effort but does not
+prove convergence.
+
+Online `run_one` uses the same 3×-first evaluator for every baseline. It constructs
+all TTNs for parameter/padded screening, but only selected TTNs for random/BO.
+GNN BO starts with SCENT, then calls the existing target-specific GP proposal
+routine; its encoder remains frozen. The first incumbent with minimum CNOT count
+is retained, and its depth is reported. The search is not depth constrained.
+
+Five untouched overlapping instances (seeds 14–18) receive three repetitions,
+with model seeds paired to search repetitions. Execution order cycles across
+methods to balance positions. Methods are independently compiled without shared
+outcome caches. Fixed candidate checkpoints are 1/2/4/8/16. Measured elapsed
+costs are reported, but these capped runs are not an uncapped fixed-time benchmark.
+Offline training is accounted separately, with untimed preprocessing disclosed.
+
+`scripts/report_revised_gnn.py` verifies the corpus splits, source/model hashes,
+strict accuracy requirements, attempt-start counts and incumbent histories, then
+writes the [comparison report](artifacts/revised_gnn/REPORT.md). All targets remain
+in the aggregate, including any where no method improves SCENT.

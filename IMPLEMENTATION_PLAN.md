@@ -290,3 +290,109 @@ parameters 428.00, random 412.07, SCENT-initialized random 480.53, frozen GNN BO
 495.67. The advantage is earlier useful selection, not a better final endpoint
 than parameter screening. Hierarchical SCENT is already strong (75.8 versus
 screeners' 75.2). Prioritize a modest generalization check; retain the Stage C hold.
+
+## Revised Stage C: scaling and compiler dependence
+
+The original larger/mixed GNN pretraining remains on hold. Revised C1 freezes the
+padded-size rule and reference compiler, beginning with a 10-qubit resource pilot
+(`configs/stage_c1.json`). Use two untouched targets (one per existing family,
+seed 13), 128 candidates, and five baselines: SCENT, random, SCENT-initialized
+random, parameter count, and padded size. This single-repetition pilot determines
+feasibility; it is not sufficient for a statistical generalization claim.
+
+Run fixed-evaluation checkpoints 1/2/4/8/16 separately from a 30-second fixed-time
+experiment. Time runs may continue through the entire pool; no 16-query cap.
+A parent process enforces the deadline and excludes unfinished results. Fixed-
+evaluation runs have a 300-second resource safety ceiling; missing checkpoints
+must remain missing. Record first verified result, completed prefixes, retries,
+whole-pool preparation and peak resident memory. Interrupted attempt artifacts
+are retained; completed-call counts do not include an interrupted in-flight call.
+The fidelity requirement is 0.999, not 0.9999.
+
+Review 10-qubit runtime/memory and selection results before deciding whether to
+run 12 qubits. C2 follows on a small subset with a materially different synthesis
+backend; changing seed or optimization level alone does not satisfy C2.
+
+### C1 follow-up: pool headroom before further scaling
+
+Complete the frozen overlapping seed-13 pool offline before expanding targets.
+`scripts/diagnose_c1_pool.py` reuses the first existing completed record per tree
+in a fixed path order, verifies duplicate outcome agreement, and evaluates missing
+candidates with the unchanged precision policy and a 60-second candidate ceiling.
+Report verified pool headroom, strict improvements/ties, score ranks and top-K
+retrieval. Operational failures/timeouts leave uncertainty about the optimum.
+This is an offline diagnostic, not online timing evidence. New synthesis starts
+are persisted before entering the compiler; JSON writes already use atomic
+replacement in the shared helper.
+
+The subsequent independent validation should use overlapping seeds 14–18 at ten
+qubits, three timing repetitions per method, frozen scores and generation policy,
+and balanced method order. Integrate attempt-start logging into that formal
+runner and report all interrupted calls. Do not treat timing repetitions as
+independent targets. Twelve-qubit feasibility and C2 remain secondary until the
+headroom result is interpreted. Expanded GNN pretraining remains on hold.
+
+### Compilation/accuracy diagnostic after depth analysis
+
+Completed a frozen three-tree, 21-configuration probe on overlapping seed 13:
+SCENT, original padded-first candidate 74, and fixed pool candidate 1. Reference
+local tolerance multipliers were 1/3/10/30/100; full-unitary completion plus
+Quantum Shannon decomposition was tested at 1/10. Final fidelity 0.999 determines
+diagnostic feasibility; original sub-budget feasibility is separately recorded.
+This changes the local tolerance policy, not the historical benchmark results.
+
+SCENT at multiplier 3 yields 592 CNOTs and two-qubit depth 436, versus 1163/900
+nominally, with final fidelity 0.99996344 and the original global sub-budgets still
+satisfied. Factor 100 fails final fidelity for all three trees. Critical-chain
+analysis identifies large root and six-leaf isometries; their rank/register changes
+account for the observed depth reduction. Full-unitary QSD completion is much
+worse than the reference path on these examples, without ruling out other synthesis
+methods. See `artifacts/compilation_probe/REPORT.md`.
+
+Next validate and freeze a shared tolerance policy before new-target comparisons.
+Rebuild target-dependent descriptors under it, and give SCENT and every selector
+the same policy. These development observations do not justify a universal factor,
+a new hardware depth requirement, or expanded GNN training yet.
+
+## Validated 3×-first policy and bounded GNN study
+
+The six-instance development cohort covers both families, eight qubits (seeds
+0/3), and ten qubits (seed 13); SCENT/balanced/fixed-random trees are paired at
+1× and 3×. Of 36 direct evaluations, 35 pass all global requirements. One 3×
+hierarchical random case exhibits a large compilation error despite acceptable
+representation error; explicit policy replay rejects it and succeeds at 1×.
+
+Freeze local factors 3→1→0.1→0 with first-feasible acceptance. Retain representation
+infidelity ≤0.0001, compilation infidelity ≤0.0004, and final F≥0.999. All failed
+attempts and retries count. Rebuild all 128 overlapping seed-13 candidates under
+this policy and use first-3× descriptors: all pass, five fall back to 1×, and SCENT
+remains the sole CNOT/depth frontier point at 592/436. See
+`artifacts/revised_policy/REPORT.md`.
+
+The authorized GNN expansion is now a bounded random-corpus ablation, not mixed
+pretraining: nested 2000/10000-tree corpora; unchanged ten-qubit architecture;
+1600 optimizer updates with batch size 128, Adam .001, validation every 100
+updates; three paired seeds. A common 500-tree validation set selects checkpoints;
+a separate 500-tree test set measures reconstruction. Training excludes the frozen
+benchmark pool topologies. Equal updates do not establish convergence.
+
+Untouched overlapping seeds 14–18 have identical 128-tree pools across seven
+methods: SCENT, random, SCENT-initialized random, parameter screening, padded
+screening, and both GNN corpus sizes with BO. Three repetitions pair model seed
+and search seed. Method positions use cyclic balanced orders. Fixed-evaluation
+checkpoints 1/2/4/8/16 are reported with actual online elapsed cost and incumbent
+depth. This study does not claim an uncapped fixed-time comparison or depth-aware
+BO. Offline model training costs are reported separately. The evaluator remains
+fixed throughout; mixed pretraining and twelve-qubit expansion are not included.
+
+Bounded GNN study outcome: all 105 runs completed (1455 candidates, 1485 synthesis
+calls, 32 retry attempts; all final evaluations feasible). The 2000- and 10000-tree
+models tie at every checkpoint in all 15 paired runs, retaining SCENT throughout.
+Mean final CNOT is 663.8 for SCENT and either GNN, 653.8 for SCENT-initialized
+random, and 633.8 for either screener. Padded screening reaches that mean at K=1;
+parameter screening reaches it by K=4. Target 15 supplies the observed improvement
+955→805 CNOT and depth 795→742; no method improves SCENT on the other four targets.
+No exhaustive-optimum claim is made for these new pools. All model checkpoints
+are selected at the final update, so convergence remains unresolved. Do not
+interpret this fixed-update null result as a general impossibility result for GNNs.
+See `artifacts/revised_gnn/REPORT.md` for paired results, costs and limitations.

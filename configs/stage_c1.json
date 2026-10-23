@@ -1,0 +1,27 @@
+{
+  "n": 10,
+  "families": [
+    "hierarchical",
+    "overlapping"
+  ],
+  "target_seed": 13,
+  "pool_size": 128,
+  "pool_seed": 20261024,
+  "candidate_budgets": [
+    1,
+    2,
+    4,
+    8,
+    16
+  ],
+  "methods": [
+    "scent",
+    "random",
+    "random_scent",
+    "parameters",
+    "padded"
+  ],
+  "scent_seed": 0,
+  "deadline_s": 30,
+  "evaluation_safety_s": 300
+}

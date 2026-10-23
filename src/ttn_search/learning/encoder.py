@@ -66,6 +66,7 @@ class Encoder(nn.Module):
         # into a 192-dimensional vector,
         self.readout = nn.Sequential(nn.Linear(192,64), nn.ReLU(), nn.Linear(64,8))
         # decoder takes the 8-dimensional vector and outputs a vector of size n*(n-1)/2 + n,
+        # n(n-1)/2 for the pairwise relations and n for the leaf features.
         self.decoder = nn.Sequential(nn.Linear(8,64), nn.ReLU(), nn.Linear(64,n*(n-1)//2+n))
 
     def forward(self, x, children):
@@ -92,7 +93,12 @@ def loss(prediction, truth, n=8):
 
 
 def corpus(count, excluded, seed=20261021, n=8):
+    """
+    Construct the corpus of random trees for training and validation.
+    """
     rng = np.random.default_rng(seed)
+    # Exclude the trees that are already in the training set 
+    # or validation set to ensure uniqueness.
     seen = set(excluded)
     trees = []
     while len(trees) < count:
@@ -105,33 +111,61 @@ def corpus(count, excluded, seed=20261021, n=8):
 
 
 def embed(model, trees):
+    """
+    Embed a list of trees into a feature space using the provided encoder model.
+    """
     model.eval()
     with torch.no_grad():
         return model(*batch(trees)).numpy()
 
 
 def train(trees, validation, seed, epochs=100):
+    """
+    Standard training loop for the encoder model.
+    """
+
+    # 1. Initialize the random seed for reproducibility, 
+    # create an instance of the Encoder model, 
+    # choose the Adam optimizer.
+
     torch.manual_seed(seed)
     model = Encoder()
     optimizer = torch.optim.Adam(model.parameters(), lr=.001)
+
+    # 2. Prepare the training and validation data 
+    # by batching the trees and extracting their features.
+
     x, a = batch(trees)
     vx, va = batch(validation)
     y = torch.tensor(np.array([features(t) for t in trees]), dtype=torch.float32)
     vy = torch.tensor(np.array([features(t) for t in validation]), dtype=torch.float32)
+
+    # 3. Training loop
+    
     history = []
     best = float('inf')
     weights = copy.deepcopy(model.state_dict())
     started = time.perf_counter()
     for epoch in range(epochs):
         model.train()
+        # Randomly shuffle the training data
         order = torch.randperm(len(trees))
         total = 0.
+        # Split the training data into batches of size 128
+        # and perform forward and backward passes.
         for ids in order.split(128):
             optimizer.zero_grad()
+            # Forward propagation: compute the model's predictions and the loss.
             value = loss(model.decoder(model(x[ids], a[ids])), y[ids])
+            # Back propagation: compute the gradients and update the model's parameters.
             value.backward()
+            # update the model's parameters using the optimizer
             optimizer.step()
             total += float(value.detach())*len(ids)
+
+        # 4. Evaluate the model on the validation set for each epoch,
+        # and keep track of the best model based on validation loss.
+
         model.eval()
         with torch.no_grad():
             val = float(loss(model.decoder(model(vx, va)), vy))
