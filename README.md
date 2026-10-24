@@ -371,3 +371,56 @@ The report compares matched-update reconstruction, per-target CNOT/depth,
 fixed-evaluation quality, measured online costs, and paired data-size effects.
 It verifies source/model fingerprints, corpus separation, accuracy requirements,
 incumbent histories and logged synthesis attempts before reporting results.
+
+Compiler-failure localization and the subsequent ranking audit are documented in
+[`POST_STAGE_B_GUIDE.md`](POST_STAGE_B_GUIDE.md#compiler-localization-and-screening-headroom-audit).
+Their generated reports are `artifacts/compiler_audit/REPORT.md` and
+`artifacts/screening_headroom/REPORT.md`; historical benchmark outputs and the
+production evaluator remain unchanged.
+
+The opt-in repaired compiler is `ttn_search.compilers.verified.compile_verified`
+(version `verified-uc-diagonal-v1-qiskit-2.6.0`). It checks multiplexer diagonal
+corrections and uses a verified local Euler fallback when needed. The historical
+reference compiler is unchanged. See `artifacts/compiler_repair/REPORT.md` for
+paired validation, gate counts, timing, and remaining representation failures.
+
+```bash
+PYTHONPATH=src OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python scripts/validate_compiler_repair.py
+OPENBLAS_NUM_THREADS=1 .venv/bin/python -m pytest tests/test_verified_compiler.py -q
+```
+
+To run the separately versioned evaluator benchmark (fresh online comparisons,
+then exhaustive offline pools):
+
+```bash
+GLIBC_TUNABLES=glibc.rtld.optional_static_tls=65536 PYTHONPATH=src OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python -u scripts/run_verified_evaluator.py
+```
+
+Outputs are isolated in `artifacts/verified_evaluator_v1/`. `status.json` records
+progress; `completion.json` and `REPORT.md` appear after the full run and audit.
+The runner freezes source, model and pool hashes, resumes completed units, and
+preserves interrupted execution directories. A process lock prevents duplicate
+concurrent runners. Existing GNN checkpoints are reused without retraining.
+
+The repaired-evaluator run has completed; its audited report is
+`artifacts/verified_evaluator_v1/REPORT.md`. A subsequent exact subtree-reuse
+construction probe is documented in `artifacts/shared_svd_feasibility/REPORT.md`
+and `DECISION.md`. The experimental cache does not change benchmark evaluators.
+
+```bash
+PYTHONPATH=src OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MPLCONFIGDIR=/tmp/ttn-matplotlib NUMBA_CACHE_DIR=/tmp/ttn-numba .venv/bin/python scripts/benchmark_shared_svd.py
+```
+
+Start the problem-suitability protocol (12 settings, two 64-tree pools each;
+fixed repaired evaluator, no GNN training):
+
+```bash
+PYTHONPATH=src OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MPLCONFIGDIR=/tmp/ttn-matplotlib NUMBA_CACHE_DIR=/tmp/ttn-numba .venv/bin/python -u scripts/run_problem_suitability.py --freeze-only
+PYTHONPATH=src OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MPLCONFIGDIR=/tmp/ttn-matplotlib NUMBA_CACHE_DIR=/tmp/ttn-numba .venv/bin/python -u scripts/run_problem_suitability.py
+```
+
+Outputs: `artifacts/problem_suitability_v1/`. The manifest and protocol are frozen
+before any compilation. Completed candidate units resume without overwriting
+historical outputs. `status.json` reports progress, and the report/audit are
+written after all evaluations. A grouped Ridge diagnostic runs only if its
+prespecified signal gate passes. The ternary experiment is not launched here.

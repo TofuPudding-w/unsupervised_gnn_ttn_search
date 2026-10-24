@@ -383,3 +383,113 @@ Offline training is accounted separately, with untimed preprocessing disclosed.
 strict accuracy requirements, attempt-start counts and incumbent histories, then
 writes the [comparison report](artifacts/revised_gnn/REPORT.md). All targets remain
 in the aggregate, including any where no method improves SCENT.
+
+## Compiler localization and screening-headroom audit
+
+The next decision checks are in `scripts/audit_compiler_failure.py` and
+`scripts/audit_screening_headroom.py`. The first captures the existing compiler's
+logical circuit, validates its register mapping with independent dense unitary
+completions, checks each synthesized isometry, and isolates a failing UCGate.
+Its dense replacement is diagnostic only. The production compiler and the
+frozen evaluation policy are unchanged.
+
+The second deduplicates historical revised-policy evaluations by target and
+candidate, checks repeated cost consistency, reads accepted circuit depths,
+and compares full-pool score ranks with known outcomes. Only seed 13 is
+exhaustive; seeds 14–18 are selected observed subsets. No missing label is
+imputed. It also reports equal-score ambiguity, retry-associated inversions,
+and actual prescreen/construction costs.
+
+Run from the repository root:
+
+```bash
+PYTHONPATH=src OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python scripts/audit_compiler_failure.py
+PYTHONPATH=src OPENBLAS_NUM_THREADS=1 .venv/bin/python scripts/audit_screening_headroom.py
+.venv/bin/python -m pytest tests/test_compiler_regression.py -q
+```
+
+Reports: `artifacts/compiler_audit/REPORT.md` and
+`artifacts/screening_headroom/REPORT.md`. The regression test has two explicitly
+expected failures in the installed upstream synthesis, plus a passing independent
+oracle. This is not a claim that the upstream defect has been repaired.
+
+## Opt-in compiler repair
+
+`src/ttn_search/compilers/verified.py` defines a separate compiler version for
+Qiskit 2.6.0; it does not patch installed packages or redirect old experiment
+runners. `checked_multiplexer` simulates each control assignment as a 2×2
+matrix, including the emitted circuit's global phase. It checks the identity
+`D @ U_synth = target` without ignoring relative phases. Incorrect diagonal
+signs are corrected without adding gates. When a diagonal correction cannot
+meet the fixed 1e-8 per-entry threshold, `euler_multiplexer` synthesizes that
+local multiplexer through controlled Z/Y/Z rotations and control phases,
+then verifies it independently as a full operator. This fallback can cost more
+gates and memory.
+
+`VerifiedIsometry` overrides the two multiplexer insertion hooks (ordinary and
+multi-controlled) while retaining upstream isometry elimination. It inserts the
+checked circuit and returns the correction belonging to that same circuit.
+`compile_verified` uses the reference compiler's wire-allocation convention
+and eagerly expands these checked isometries before transpilation, preventing
+high-level synthesis from silently recreating the original faulty operation.
+
+`stats={}` can be passed to `compile_verified` to record checked multiplexers,
+corrected diagonals, Euler fallbacks and maximum residuals. Final statevector
+verification, representation sub-budgets, and the existing tolerance fallback
+remain necessary. This adapter is version-gated because its Qiskit hooks are
+private. An unsupported backend version raises an explicit error.
+
+The paired validation runner checks the original hierarchical failure, all
+unique historical retry candidates from the six-pool audit, and successful
+controls. Its direct 3× comparisons are diagnostics; representation-infeasible
+3× cases still require fallback in an actual evaluator. The new costs must not
+be merged into old accepted-fallback labels. Future evaluator runs must record
+`COMPILER_VERSION` and the backend file hash, and refresh all method comparisons
+under the same compiler version.
+
+## Separately versioned evaluator run
+
+`screening/verified_evaluator.py` preserves the prior strict acceptance and retry
+rules while explicitly calling the repaired compiler. Each outcome records its
+compiler version, compiler/evaluator hashes and a version-bound identity.
+Representation preparation identities stay independent of compiler version
+because they describe the SVD construction only. The evaluator logs synthesis
+starts durably before compilation, saves every attempted circuit, includes
+repair statistics, and refuses to overwrite an existing evaluation directory.
+
+`scripts/run_verified_evaluator.py` repeats the historical seven-method,
+five-target, three-repeat online benchmark at K=1/2/4/8/16 with frozen models.
+It regenerates and checks each online pool and performs fresh synthesis for each
+method. After all 105 online runs, it builds exhaustive 128-candidate tables for
+seeds 13–18, reusing only results from this new version and evaluating missing
+candidates. This separates offline completeness from online timing and avoids
+using pool optima to guide search. No old circuit labels enter the new evaluator.
+
+Outputs live under `artifacts/verified_evaluator_v1`. A frozen protocol checks
+source/model/input hashes on resume. Each unit receives an execution directory;
+incomplete executions remain visible and their extra synthesis starts are
+reported separately. Completed benchmark-unit timings do not include abandoned
+executions, so any interruptions must be considered when interpreting total
+resource use. The report generator independently checks all final incumbent
+and pool circuits' CNOT/depth, as well as policy compliance and call accounting.
+
+## Exact subtree construction-cost probe
+
+`screening/shared_svd.py` implements an experimental `SharedSVD` context tied to
+one normalized target state and one truncation tolerance. Keys are the complete
+labelled subtree and its root status. A matching leaf set with a different
+internal topology is not a match. Reused nodes retain the original SVD rule;
+each candidate still undergoes local-tensor reconstruction, representation
+fidelity checking and descriptor computation. Arrays are read-only and callers
+must treat shared nodes as immutable. Do not reuse a context across targets or
+retry tolerances.
+
+`scripts/benchmark_shared_svd.py` measures independent versus shared builds for
+128 fixed candidates at 8/10/12 qubits, both existing families and target seed
+19. Each repetition starts a fresh cache; timing order alternates. State/rank/
+score equivalence is asserted outside timing. No circuits are compiled and no
+models are trained. The independent diagnostic releases node graphs after each
+candidate while keeping states and descriptors; this is not a full production
+screening/compilation memory or timing comparison. The cache remains outside
+all frozen evaluators. Read both `REPORT.md` and `DECISION.md` in
+`artifacts/shared_svd_feasibility` before interpreting the median timing ratios.

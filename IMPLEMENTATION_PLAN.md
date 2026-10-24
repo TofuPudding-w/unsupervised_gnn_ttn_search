@@ -396,3 +396,102 @@ No exhaustive-optimum claim is made for these new pools. All model checkpoints
 are selected at the final update, so convergence remains unresolved. Do not
 interpret this fixed-update null result as a general impossibility result for GNNs.
 See `artifacts/revised_gnn/REPORT.md` for paired results, costs and limitations.
+
+### Follow-up decision checks: compiler and ranking audit
+
+- Localized the hierarchical seed-13 3× failure to one Qiskit UCGate inside a
+  64×4 isometry. Independent dense completion validates the TTN and physical
+  register mapping; replacing only that block restores fidelity. Preserve the
+  standalone reproducer and strict expected-failure regression tests. The exact
+  internal numerical defect and an efficient production repair remain open.
+- Audited 617 unique candidate/target evaluations across six ten-qubit
+  overlapping targets. Only seed 13 is exhaustive. Padded screening's first
+  candidate matches the best observed CNOT on every target; other cost-ranking
+  errors do not yet demonstrate useful shortlist headroom.
+- Existing evaluation labels remain specific to the frozen compiler plus
+  failure/fallback policy. Do not mix diagnostic replacement costs into them.
+  Version and validate any compiler repair before refreshing labels.
+- Do not automatically launch supervised GNN ranking. First establish additional
+  shortlist headroom or a measured descriptor-computation bottleneck. The
+  audit reports retain unknown pool optima explicitly.
+
+### Compiler repair implemented (separate version)
+
+- Added `verified-uc-diagonal-v1-qiskit-2.6.0` as an explicit alternative to the
+  frozen reference compiler. It independently verifies multiplexer branch
+  matrices, corrects erroneous diagonal phases, and uses verified local Euler
+  synthesis when the discrepancy cannot be corrected diagonally.
+- The bounded paired development validation covers 28 cases: the original
+  hierarchical failure, all 14 unique historical retry candidates from the
+  six-pool audit, and 13 successful controls. Repaired compilation passes all;
+  12 frozen direct compilations fail. Successful controls retain CNOT and depth.
+- Three direct 3× cases still violate the representation sub-budget. The common
+  tolerance fallback remains required. The repair is not a relaxation of
+  accuracy requirements.
+- Production benchmark runners and historical labels are unchanged. Next:
+  explicitly integrate this version into a new evaluator run, refresh comparison
+  labels under one common policy, then complete the remaining candidate pools.
+  No new GNN training is authorized by these repair results alone.
+
+### Separately versioned evaluator refresh
+
+Implemented an isolated `verified_evaluator_v1` run with unchanged strict budgets
+and retry ordering, explicit compiler/evaluator fingerprints, persistent call
+accounting, and overwrite protection. The run repeats all 105 online method
+comparisons using frozen checkpoints, then completes six 128-tree offline pools
+using only repaired-version labels. Training remains on hold. Results are not
+complete until `artifacts/verified_evaluator_v1/completion.json` and its audited
+`REPORT.md` exist; progress is recorded in `status.json`.
+
+### Repaired-evaluator completion and next bounded check
+
+The separately versioned run completed: 105 online runs, 768 exhaustively
+measured pool candidates, no failed final evaluations. All 105 final CNOT/depth
+endpoints match the historical results. Padded screening selects the unique
+pool Pareto candidate first in all six pools; SCENT is optimal in five, with
+only overlapping seed 15 improving to 805 CNOT / depth 742. These are fixed-pool
+optima, not global state-preparation bounds.
+
+Completed a separate exact-subtree reuse probe at 8/10/12 qubits, both existing
+families, seed 19, 128 candidates and three timing repetitions. All 2,304 paired
+builds preserve amplitudes, ranks, scores and feasibility decisions. Median
+construction savings are small, and twelve-qubit timing variability prevents a
+strong speedup claim. The experimental cache is not integrated into evaluators.
+See `artifacts/shared_svd_feasibility/REPORT.md` and `DECISION.md` for results and
+memory/retention limitations. Continue to pause GNN training; benchmark breadth
+and candidate-generation headroom are the next research questions.
+
+### Interpretation correction and problem-suitability protocol
+
+Small subtree-cache savings do not bound potential learned-prescreening gains.
+The 12-qubit construction/reconstruction/verification/scoring total remains
+about 4–5 seconds per 128 candidates in this probe; component costs were not
+isolated. A learned descriptor substitute has not demonstrated end-to-end
+benefit, but the cache result alone cannot establish its upper bound.
+
+The next development experiment is specified in `PROBLEM_SUITABILITY_PROTOCOL.md`.
+Keep ten qubits, the repaired compiler and strict policy fixed. Compare two
+equal-size candidate generators across existing controls and a controlled
+TTN-generated family. Exhaustively evaluate the bounded pools; retain every
+instance and operational failure. Freeze instantiated targets/pools before
+obtaining circuit labels. This is a protocol, not a completed or launched run;
+GNN expansion remains on hold.
+
+### 独立三叉预实验的顺序
+
+保留问题适配性协议主体，优先执行二叉目标/候选多样性实验。随后按
+`TERNARY_PREFLIGHT_PROTOCOL.md` 开展最多 16 个局部案例的同态分块实验：
+每案例一个三叉块、三种二叉细化，另允许原始规范诊断，总计最多 80 次主/诊断
+编译。选择目标和合并边不依赖线路输赢。先验证合并/细化保持同一近似态及
+寄存器映射；新适配层独立版本化。新叉数的独立构建和 GNN 暂不启动。
+
+### Problem-suitability implementation
+
+Implemented controlled TTN targets, quota-checked random/mixed pools, an
+instrumented SVD reference-equivalence check, fixed target-dependent feature
+sets, versioned exhaustive evaluation, and a grouped diagnostic/report runner.
+Correctness tests cover reproducibility, generating-cut rank bounds, independent
+ZZ evolution, pool quotas and profile equivalence. Instantiation/fingerprinting
+precedes compilation. Execution state lives in `artifacts/problem_suitability_v1`;
+completion must be checked there rather than inferred from implementation status.
+No GNN training or ternary experiment is included in this run.
